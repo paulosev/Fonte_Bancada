@@ -5,6 +5,32 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/).
 
 ---
 
+## [1.5.0] — EEPROM do DAC: bloqueio de hardware no power-on
+
+### Adicionado
+- `dac.h` — método `burnEEPROM()`: grava raw 4095 (~3,3 V) na EEPROM interna do MCP4725
+- `psu.h` — método público `burnDACEEPROM()` expõe a gravação para o main
+- Comando serial `burn` com confirmação obrigatória (`burnok`) para evitar gravação acidental
+
+### Como funciona
+Ao energizar o circuito, o MCP4725 carrega automaticamente o valor da EEPROM para sua
+saída antes de qualquer comunicação I2C. Com 4095 gravado, FB = 3,3 V desde o instante
+zero → XL4015 bloqueado → V_out = 0 V durante todo o boot do ESP32 (~300 ms).
+
+```
+t=0 ms    Alimentação sobe
+t=~1 ms   MCP4725 carrega EEPROM (4095) → FB = 3,3 V automaticamente
+t=~2 ms   XL4015 inicia com FB >> Vref → V_out = 0 V  ✔
+t=~300 ms ESP32 termina boot → forceOff() confirma DAC = 4095
+t=...     setOutput(true) → EMA rampa suave 0 → V_set
+```
+
+### Advertência
+Gravar APENAS UMA VEZ. A EEPROM do MCP4725 suporta ~1.000.000 ciclos.
+Chamar em todo boot esgotaria a memória em poucos anos.
+
+---
+
 ## [1.4.0] — EMA: rampa suave de setpoint
 
 ### Adicionado

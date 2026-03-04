@@ -49,6 +49,7 @@
 //  ✔ OVP      – proteção contra sobretensão com histérese
 //  ✔ OCP      – proteção contra sobrecorrente com histérese
 //  ✔ P_out    – cálculo de potência de saída em tempo real (W)
+//  ✔ EEPROM   – gravacao unica da EEPROM do DAC (comando 'burn'): DAC inicia em 3,3V no power-on
 //  ✔ EMA      – rampa suave de setpoint: elimina pico na partida e troca de V_set
 //  ✔ On/Off   – liga/desliga saída via DAC máximo (sem pino enable no XL4015)
 //  ✔ Buzzer   – sinalização sonora de OVP/OCP (GPIO18, beep contínuo)
@@ -170,6 +171,7 @@ void setup() {
     Serial.println("  on/off  – liga / desliga saída");
     Serial.println("  reset   – reset de proteção OVP/OCP");
     Serial.println("  s       – status atual");
+  Serial.println("  burn    – grava EEPROM do DAC (usar UMA UNICA VEZ na instalacao)");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -252,6 +254,41 @@ void handleSerial() {
     // s – snapshot do estado atual (mesmo que a impressão periódica)
     else if (cmd == "s") {
         psu.printStatus();
+    }
+    // ── Gravação única da EEPROM do MCP4725 ──────────────────────────────────
+    // Grava raw 4095 (~3,3 V) na EEPROM do DAC. Após isso, ao energizar o
+    // circuito o MCP4725 já inicia com FB = 3,3 V, bloqueando o XL4015
+    // antes mesmo do ESP32 terminar o boot. Elimina pico de tensão no power-on.
+    // USAR APENAS UMA VEZ na primeira instalação — EEPROM tem ~1M ciclos.
+    else if (cmd == "burn") {
+        Serial.println("[BURN] ATENCAO: Este comando grava a EEPROM do MCP4725.");
+        Serial.println("[BURN] Use apenas na primeira instalacao do firmware.");
+        Serial.println("[BURN] Confirme digitando 'burnok' em 5 segundos...");
+        // Aguarda confirmação explícita para evitar gravação acidental
+        const uint32_t deadline = millis() + 5000;
+        bool confirmed = false;
+        while (millis() < deadline) {
+            if (Serial.available()) {
+                String conf = Serial.readStringUntil('\n');
+                conf.trim(); conf.toLowerCase();
+                if (conf == "burnok") { confirmed = true; break; }
+                else { break; }
+            }
+            delay(50);
+        }
+        if (!confirmed) {
+            Serial.println("[BURN] Cancelado.");
+        } else {
+            Serial.println("[BURN] Gravando EEPROM com valor 4095 (3.3V)...");
+            if (psu.burnDACEEPROM()) {
+                Serial.println("[BURN] OK! EEPROM gravada com sucesso.");
+                Serial.println("[BURN] A partir de agora o DAC inicia em 3.3V ao energizar.");
+                Serial.println("[BURN] Nao use este comando novamente.");
+            } else {
+                Serial.println("[BURN] ERRO: Falha na gravacao ou verificacao.");
+                Serial.println("[BURN] Verifique a conexao I2C e tente novamente.");
+            }
+        }
     }
     else {
         Serial.println("[CMD] Comando não reconhecido. Comandos: v i mcv mcc on off reset s");
