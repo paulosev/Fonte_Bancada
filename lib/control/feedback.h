@@ -107,7 +107,7 @@ inline float computeFeedbackVoltage(Mode  mode,
     float v_dac = 0.0f;
 
     if (mode == Mode::CV) {
-        if (v_set < V_OUT_MIN) v_set = V_OUT_MIN;  // proteção divisão por zero
+        if (v_set < V_OUT_MIN) v_set = V_OUT_MIN;  // clamp ao zero prático (0,0001 V)
         const float K = XL4015_VREF / v_set;        // fator de atenuação
         v_dac = v_out * K;
 

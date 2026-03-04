@@ -71,6 +71,7 @@
 #include "feedback.h"
 #include "protection.h"
 #include "buzzer.h"
+#include "ema.h"
 
 namespace app {
 
@@ -163,12 +164,17 @@ public:
     // para garantir resposta rápida ao comando "off".
     // Liga (true) ou desliga (false) a saída.
     // OFF: DAC vai ao máximo (4095) → FB >> Vref → XL4015 reduz V_out a ~0 V.
-    // ON:  equação de controle assume normalmente.
+    // ON:  EMA é resetado para 0 → partida suave do zero até V_set/I_set.
     void setOutput(bool on) {
         portENTER_CRITICAL(&_spinlock);
         _outputEnabled = on;
         portEXIT_CRITICAL(&_spinlock);
-        if (!on) {
+        if (on) {
+            // Reseta EMA para 0: o filtro vai rampar suavemente até o setpoint
+            // atual, evitando pico de tensão na partida.
+            _emaV.reset(0.0f);
+            _emaI.reset(0.0f);
+        } else {
             _dac.forceOff();
             _buzzer.setActive(false);
         }
@@ -269,6 +275,14 @@ private:
     float          _vSet{DEFAULT_V_SET};
     float          _iSet{DEFAULT_I_SET};
     control::Mode  _mode{control::Mode::CV};
+
+    // Filtros EMA para rampa suave de setpoint.
+    // Inicializados em 0: ao ligar, o EMA sobe suavemente de 0 até V_set/I_set,
+    // eliminando o pico de tensão na partida e nas mudanças de setpoint.
+    // EMA_MED: α = 0.005 → τ ≈ 140 ms → 99% do valor em ~700 ms
+    // Troque por EMA_FAST ou EMA_SLOW para ajustar a velocidade da rampa.
+    control::EMA_MED _emaV{0.0f};  // rampa suave do setpoint de tensão
+    control::EMA_MED _emaI{0.0f};  // rampa suave do setpoint de corrente
     bool           _outputEnabled{false};
 
     // ── FreeRTOS / timer de hardware ─────────────────────────────────────────
@@ -395,10 +409,13 @@ private:
             portEXIT_CRITICAL(&_spinlock);
 
             // ③ + ④ Calcula V_dac e escreve no DAC.
-            //   computeFeedbackVoltage() aplica a equação CV ou CC.
-            //   writeVoltage() usa Fast Write (2 bytes I2C, ~18 µs).
+            //   Os setpoints passam pelo filtro EMA antes da equação,
+            //   gerando uma rampa suave em vez de um degrau.
+            //   Custo: ~1 µs (2 operações float na FPU do Xtensa LX6).
+            const float vSetSmooth = _emaV.update(vSet);
+            const float iSetSmooth = _emaI.update(iSet);
             const float v_dac = control::computeFeedbackVoltage(
-                mode, v, i, vSet, iSet
+                mode, v, i, vSetSmooth, iSetSmooth
             );
             _dac.writeVoltage(v_dac);
 

@@ -100,6 +100,17 @@ constexpr uint32_t SERIAL_PRINT_MS = 200u;  // [ms] → 5 Hz
 constexpr float DEFAULT_V_SET = 5.0f;   // [V]
 constexpr float DEFAULT_I_SET = 1.0f;   // [A]
 
+// ── FILTRO EMA (rampa suave de setpoint) ─────────────────────────────────────
+//
+//  α da equação: V_ema[n] = α × V_set + (1−α) × V_ema[n−1]
+//
+//  Constante de tempo: τ ≈ CONTROL_PERIOD_US (em s) / EMA_ALPHA
+//  Com CONTROL_PERIOD_US = 700 µs e α = 0,005:
+//    τ ≈ 0,14 s  →  99% do valor final em ~700 ms
+//
+//  Aumente α para resposta mais rápida; diminua para rampa mais longa.
+constexpr float EMA_ALPHA = 0.005f;
+
 // ── BUZZER ────────────────────────────────────────────────────────────────────
 // GPIO de saída para buzzer passivo/ativo de sinalização de proteção.
 // O buzzer é acionado quando OVP ou OCP dispara e silenciado ao resetar.

@@ -49,6 +49,9 @@
 //  ✔ OVP      – proteção contra sobretensão com histérese
 //  ✔ OCP      – proteção contra sobrecorrente com histérese
 //  ✔ P_out    – cálculo de potência de saída em tempo real (W)
+//  ✔ EMA      – rampa suave de setpoint: elimina pico na partida e troca de V_set
+//  ✔ On/Off   – liga/desliga saída via DAC máximo (sem pino enable no XL4015)
+//  ✔ Buzzer   – sinalização sonora de OVP/OCP (GPIO18, beep contínuo)
 //  ✔ Interface serial para controle e monitoramento
 //
 // ── ARQUITETURA DE SOFTWARE ───────────────────────────────────────────────────
@@ -187,6 +190,9 @@ void loop() {
 
     // Processa comandos recebidos pela Serial
     handleSerial();
+
+    // Atualiza buzzer (beep não-bloqueante, gerenciado no Core 0)
+    psu.tickBuzzer();
 
     // Yield explícito: cede ao idle task do Core 0 para não starvar
     // o watchdog e outras tasks de baixa prioridade (ex: WiFi stack).
