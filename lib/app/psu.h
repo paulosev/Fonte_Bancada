@@ -253,6 +253,17 @@ public:
         _buzzer.tick();
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // burnDACEEPROM()  –  Grava raw 4095 na EEPROM do MCP4725.
+    //
+    // Expõe dac.burnEEPROM() para o main.cpp sem quebrar o encapsulamento.
+    // Deve ser chamado apenas via comando serial "burn" na primeira instalação.
+    // Ver dac.h para detalhes completos do protocolo e advertências.
+    // ─────────────────────────────────────────────────────────────────────────
+    bool burnDACEEPROM() {
+        return _dac.burnEEPROM();
+    }
+
     static void registerInstance(PSU* inst) { _instance = inst; }
 
 private:
