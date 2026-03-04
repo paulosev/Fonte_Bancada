@@ -14,8 +14,12 @@
 //
 //  V_OUT_MIN = 1,3 V: limitado pela tensão de referência interna do XL4015.
 //    Com V_dac < Vref (1,25 V), o XL4015 não consegue regular abaixo disso.
-constexpr float V_OUT_MAX = 24.0f;   // [V] tensão máxima de saída
-constexpr float V_OUT_MIN =  1.3f;   // [V] tensão mínima de saída
+constexpr float V_OUT_MAX = 24.0f;    // [V] tensão máxima de saída
+// V_OUT_MIN não é um limite físico de saída — é apenas o valor mínimo
+// aceito como setpoint para evitar divisão por zero em K = Vref / V_set.
+// 0,0001 V é tratado como "zero prático": abaixo disso o XL4015 já estará
+// no mínimo absoluto de saída independentemente do controle digital.
+constexpr float V_OUT_MIN = 0.0001f; // [V] zero prático (evita div/0)
 constexpr float I_OUT_MAX =  5.0f;   // [A] corrente máxima de saída
 constexpr float I_OUT_MIN =  0.0f;   // [A] corrente mínima (limite inferior)
 

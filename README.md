@@ -120,7 +120,7 @@ V_dac = I_out × K_i
 
 | Feature | Detalhe |
 |---|---|
-| **Modo CV** | Regulação de tensão constante de 1,3 V a 24 V |
+| **Modo CV** | Regulação de tensão constante de 0 a 24 V (mínimo prático: 0,0001 V) |
 | **Modo CC** | Regulação de corrente constante de 0 A a 5 A |
 | **OVP** | Proteção contra sobretensão com histérese (dispara em 25 V) |
 | **OCP** | Proteção contra sobrecorrente com histérese (dispara em 5,2 A) |
@@ -205,7 +205,7 @@ Todas as constantes estão em **`include/config.h`**. Principais parâmetros:
 | Constante | Padrão | Descrição |
 |---|---|---|
 | `V_OUT_MAX` | 24,0 V | Tensão máxima de saída |
-| `V_OUT_MIN` | 1,3 V | Tensão mínima (Vref do XL4015) |
+| `V_OUT_MIN` | 0,0001 V | Zero prático do setpoint (evita divisão por zero em K = Vref / V_set) |
 | `I_OUT_MAX` | 5,0 A | Corrente máxima |
 | `OVP_THRESHOLD` | 25,0 V | Limiar de disparo OVP |
 | `OCP_THRESHOLD` | 5,2 A | Limiar de disparo OCP |
