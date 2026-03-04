@@ -5,6 +5,74 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/).
 
 ---
 
+## [1.8.0] — OTA via Access Point (sem roteador, sem credenciais)
+
+### Adicionado
+- `lib/app/ota_manager.h` — gerenciador OTA em modo Access Point
+- Constantes em `config.h`: `OTA_AP_SSID`, `OTA_HOSTNAME`, `DRD_TIMEOUT_S`, `OTA_TIMEOUT_MS`
+- Biblioteca: `cjmcv/ESP_DoubleResetDetector`
+- Linhas comentadas em `platformio.ini` para upload OTA (`upload_port = 192.168.4.1`)
+- `.gitignore` — exclui pasta `.pio/` e `.vscode/`
+
+### Como usar
+1. Dê **2× RST** em menos de 2 s
+2. Buzzer emite **3 beeps curtos** → AP ativo
+3. Conecte o notebook na rede WiFi **"Fonte-OTA"** (aberta, sem senha)
+4. No `platformio.ini`, descomente `upload_protocol` e `upload_port = 192.168.4.1`
+5. Faça o upload normalmente pelo PlatformIO
+6. ESP reinicia automaticamente com o novo firmware
+
+### Vantagens do modo AP
+- Não precisa de roteador nem rede WiFi externa
+- Sem arquivo de credenciais para gerenciar
+- Funciona em qualquer ambiente (bancada, campo, oficina)
+- WiFi fica ativo apenas durante a janela OTA (5 min padrão)
+
+### Indicações do buzzer
+| Padrão | Significado |
+|---|---|
+| 1 beep curto (setup) | Boot concluído normalmente |
+| 3 beeps curtos repetidos | Modo OTA ativo, aguardando upload |
+| 1 beep longo | Timeout OTA — AP desligado |
+
+---
+
+## [1.7.0] — OTA WiFi + Duplo Reset (versão com STA — substituída por AP)
+
+### Adicionado
+- `lib/app/ota_manager.h` — gerenciador de OTA com ArduinoOTA
+- `include/credentials.h` — credenciais WiFi e senha OTA (não commitado)
+- `include/credentials.h.example` — modelo para o GitHub
+- `.gitignore` — exclui credentials.h e pasta .pio/
+- `psu.h` — métodos `getBuzzer()` e `beep()` para uso externo
+- Constantes em `config.h`: `DRD_TIMEOUT_S`, `OTA_TIMEOUT_MS`, `WIFI_CONNECT_TIMEOUT_MS`
+- Biblioteca: `cjmcv/ESP_DoubleResetDetector`
+- Linhas comentadas em `platformio.ini` para upload OTA direto
+
+### Como usar
+1. Copie `include/credentials.h.example` para `include/credentials.h`
+2. Preencha SSID, senha WiFi e senha OTA
+3. Faça o primeiro upload via serial normalmente
+4. Para atualizar firmware depois: dê 2× RST em menos de 2 s
+5. Buzzer emite 3 beeps → WiFi ativo, ESP visível como `fonte-bancada.local`
+6. No PlatformIO: selecione a porta OTA e faça upload
+
+### Indicações do buzzer
+| Padrão | Significado |
+|---|---|
+| 1 beep curto | Boot concluído |
+| 1 beep longo | Conectando WiFi... |
+| 3 beeps curtos | Modo OTA ativo (repetido a cada 3 s) |
+| 1 beep longo final | OTA encerrado (timeout ou erro) |
+| Beep contínuo | OVP / OCP ativo |
+
+### Segurança
+- WiFi só fica ativo durante janela OTA (padrão: 5 min)
+- Upload protegido por senha (`OTA_PASSWORD` em credentials.h)
+- Credenciais nunca vão para o repositório (.gitignore)
+
+---
+
 ## [1.6.0] — Crossover automático CV↔CC
 
 ### Adicionado

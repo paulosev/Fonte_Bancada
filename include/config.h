@@ -122,6 +122,25 @@ constexpr uint8_t CROSSOVER_MIN_CYCLES = 5u;     // ciclos para confirmar troca
 //  Aumente α para resposta mais rápida; diminua para rampa mais longa.
 constexpr float EMA_ALPHA = 0.005f;
 
+// ── OTA / WiFi (modo Access Point) ───────────────────────────────────────────
+//
+//  O ESP32 cria uma rede WiFi própria (AP) ao entrar em modo OTA.
+//  Não precisa de roteador nem credenciais externas.
+//
+//  DRD_TIMEOUT_S: janela para detectar duplo reset (2× RST em <2 s).
+//
+//  OTA_TIMEOUT_MS: tempo máximo aguardando upload. Após isso WiFi desliga.
+//
+//  OTA_AP_SSID: nome da rede WiFi criada pelo ESP no modo OTA.
+//  OTA_AP_IP:   endereço IP fixo do ESP no modo AP.
+//    Acesse http://OTA_AP_IP no navegador para confirmar conexão (opcional).
+//    Use este IP no PlatformIO como upload_port.
+constexpr float    DRD_TIMEOUT_S     = 2.0f;          // [s]  janela duplo reset
+constexpr uint32_t OTA_TIMEOUT_MS    = 300000UL;      // [ms] 5 min aguardando OTA
+constexpr uint32_t OTA_BEEP_INTERVAL_MS = 3000UL;     // [ms] intervalo beep OTA
+constexpr char     OTA_AP_SSID[]     = "Fonte-OTA";   // nome da rede AP
+constexpr char     OTA_HOSTNAME[]    = "fonte-bancada";// hostname mDNS
+
 // ── BUZZER ────────────────────────────────────────────────────────────────────
 // GPIO de saída para buzzer passivo/ativo de sinalização de proteção.
 // O buzzer é acionado quando OVP ou OCP dispara e silenciado ao resetar.

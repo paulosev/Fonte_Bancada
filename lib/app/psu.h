@@ -277,6 +277,17 @@ public:
     // Deve ser chamado apenas via comando serial "burn" na primeira instalação.
     // Ver dac.h para detalhes completos do protocolo e advertências.
     // ─────────────────────────────────────────────────────────────────────────
+    // Acesso ao buzzer para uso externo (OTAManager)
+    hal::Buzzer& getBuzzer() { return _buzzer; }
+
+    // Beep bloqueante simples (uso pontual: setup, OTA, etc.)
+    // NÃO usar no loop de controle — usar tickBuzzer().
+    void beep(uint32_t ms) {
+        digitalWrite(PIN_BUZZER, HIGH);
+        delay(ms);
+        digitalWrite(PIN_BUZZER, LOW);
+    }
+
     bool burnDACEEPROM() {
         return _dac.burnEEPROM();
     }
