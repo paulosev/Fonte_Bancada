@@ -87,8 +87,18 @@ public:
     //
     // Chamado ao desabilitar a saída ou ao acionar proteção OVP/OCP.
     // ─────────────────────────────────────────────────────────────────────────
+    // Zera DAC → FB = 0 V → XL4015 eleva duty cycle ao máximo.
+    // Não usar como "desligar": sem controle, V_out pode subir.
     void shutdown() {
         _fastWrite(0);
+    }
+
+    // Força DAC ao máximo (raw 4095 → ~3,3 V no pino FB).
+    // Com FB >> Vref (1,25 V), o XL4015 reduz duty cycle ao mínimo
+    // e V_out cai para ~0 V. Esta é a forma correta de desligar a saída
+    // já que o XL4015 não possui pino de enable.
+    void forceOff() {
+        _fastWrite(DAC_RESOLUTION - 1u);  // 4095
     }
 
 private:

@@ -70,6 +70,7 @@
 #include "dac.h"
 #include "feedback.h"
 #include "protection.h"
+#include "buzzer.h"
 
 namespace app {
 
@@ -95,8 +96,9 @@ public:
             Serial.println("[PSU] AVISO: INA219 não respondeu – sem leitura de V/I.");
         }
 
-        // Garante saída zerada antes de qualquer coisa
-        _dac.shutdown();
+        // Garante saída desligada antes de qualquer coisa
+        _dac.forceOff();
+        _buzzer.begin();
         _spinlock = portMUX_INITIALIZER_UNLOCKED;
 
         // ── Task de controle (Core 1, prioridade máxima) ──────────────────
@@ -159,11 +161,17 @@ public:
     // Habilita/desabilita a saída.
     // Ao desabilitar, zera o DAC imediatamente (sem esperar o próximo ciclo)
     // para garantir resposta rápida ao comando "off".
+    // Liga (true) ou desliga (false) a saída.
+    // OFF: DAC vai ao máximo (4095) → FB >> Vref → XL4015 reduz V_out a ~0 V.
+    // ON:  equação de controle assume normalmente.
     void setOutput(bool on) {
         portENTER_CRITICAL(&_spinlock);
         _outputEnabled = on;
         portEXIT_CRITICAL(&_spinlock);
-        if (!on) _dac.shutdown();
+        if (!on) {
+            _dac.forceOff();
+            _buzzer.setActive(false);
+        }
     }
 
     // Reseta os flags de OVP/OCP após o usuário corrigir a condição de falha.
@@ -231,12 +239,21 @@ public:
 
     // Registra o ponteiro da instância para uso na ISR (que é estática).
     // Deve ser chamado antes de begin().
+    // Deve ser chamado periodicamente no loop() do Core 0.
+    // Gerencia o padrão de beep do buzzer de forma não-bloqueante.
+    void tickBuzzer() {
+        // Espelha o estado de proteção no buzzer
+        _buzzer.setActive(_protection.isTripped());
+        _buzzer.tick();
+    }
+
     static void registerInstance(PSU* inst) { _instance = inst; }
 
 private:
 
     // ── Periféricos (HAL) ────────────────────────────────────────────────────
-    hal::INA219         _ina;        // sensor de tensão e corrente
+    hal::INA219         _ina;
+    hal::Buzzer         _buzzer;        // sensor de tensão e corrente
     hal::DAC            _dac;        // DAC que alimenta o pino FB do XL4015
     control::Protection _protection; // lógica OVP + OCP com histérese
 
@@ -344,7 +361,8 @@ private:
             // Drena a conversão em andamento para não deixar o INA219
             // com estado inconsistente no próximo ciclo.
             if (_protection.isTripped() || !_outputEnabled) {
-                _dac.shutdown();
+                // Desliga saída: DAC máximo → FB >> Vref → V_out → ~0 V
+                _dac.forceOff();
                 _ina.readPrimary();    // descarta resultado; limpa flag CNVR
                 _ina.tickSecondary();  // mantém o canal secundário ativo
                 continue;

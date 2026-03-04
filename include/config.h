@@ -99,3 +99,10 @@ constexpr uint32_t SERIAL_PRINT_MS = 200u;  // [ms] → 5 Hz
 //  Ao ligar com "on", estes setpoints são usados.
 constexpr float DEFAULT_V_SET = 5.0f;   // [V]
 constexpr float DEFAULT_I_SET = 1.0f;   // [A]
+
+// ── BUZZER ────────────────────────────────────────────────────────────────────
+// GPIO de saída para buzzer passivo/ativo de sinalização de proteção.
+// O buzzer é acionado quando OVP ou OCP dispara e silenciado ao resetar.
+constexpr int      PIN_BUZZER        = 18;
+constexpr uint32_t BUZZER_BEEP_MS    = 200u;  // duração de cada beep [ms]
+constexpr uint32_t BUZZER_INTERVAL_MS= 400u;  // intervalo entre beeps [ms]
