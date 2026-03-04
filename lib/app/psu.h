@@ -72,6 +72,7 @@
 #include "protection.h"
 #include "buzzer.h"
 #include "ema.h"
+#include "crossover.h"
 
 namespace app {
 
@@ -155,9 +156,21 @@ public:
         portENTER_CRITICAL(&_spinlock);
         _mode = mode;
         portEXIT_CRITICAL(&_spinlock);
-        // Nota: a troca de modo é percebida pelo Core 1 no próximo ciclo
-        // (~700 µs), quando relê os setpoints atomicamente.
+        // Sincroniza o estado interno do crossover para evitar que ele
+        // reverta imediatamente o modo que o usuário acabou de definir.
+        _crossover.forceMode(mode);
     }
+
+    // Habilita/desabilita crossover automático CV↔CC.
+    // Quando desabilitado, o modo definido por setMode() é respeitado
+    // fixamente (comportamento da v18).
+    void setCrossoverEnabled(bool enabled) {
+        _crossover.setEnabled(enabled);
+        Serial.printf("[PSU] Crossover automatico: %s\n",
+                      enabled ? "HABILITADO" : "DESABILITADO");
+    }
+
+    bool isCrossoverEnabled() const { return _crossover.isEnabled(); }
 
     // Habilita/desabilita a saída.
     // Ao desabilitar, zera o DAC imediatamente (sem esperar o próximo ciclo)
@@ -234,13 +247,17 @@ public:
     // ─────────────────────────────────────────────────────────────────────────
     void printStatus() {
         const float v = getVout(), i = getIout(), p = getPout();
-        const char* modeStr = (_mode == control::Mode::CV) ? "CV" : "CC";
+        // Exibe o modo ATIVO (pode diferir do setpoint do usuário quando
+        // o crossover automático está habilitado e trocou o modo).
+        const char* modeStr = (_crossover.getMode() == control::Mode::CV)
+                              ? "CV" : "CC";
+        const char* xoStr   = _crossover.isEnabled() ? "auto" : "man";
         const char* protStr = _protection.isTripped()
             ? (_protection.isOVP() ? "OVP!" : "OCP!")
             : "OK";
-        Serial.printf("[PSU] Mode:%-2s | Vset:%5.2fV Iset:%4.2fA | "
+        Serial.printf("[PSU] Mode:%-2s(%s) | Vset:%5.2fV Iset:%4.2fA | "
                       "Vout:%5.2fV Iout:%4.3fA Pout:%6.2fW | Prot:%s\n",
-                      modeStr, _vSet, _iSet, v, i, p, protStr);
+                      modeStr, xoStr, _vSet, _iSet, v, i, p, protStr);
     }
 
     // Registra o ponteiro da instância para uso na ISR (que é estática).
@@ -292,8 +309,9 @@ private:
     // eliminando o pico de tensão na partida e nas mudanças de setpoint.
     // EMA_MED: α = 0.005 → τ ≈ 140 ms → 99% do valor em ~700 ms
     // Troque por EMA_FAST ou EMA_SLOW para ajustar a velocidade da rampa.
-    control::EMA_MED _emaV{0.0f};  // rampa suave do setpoint de tensão
-    control::EMA_MED _emaI{0.0f};  // rampa suave do setpoint de corrente
+    control::EMA_MED  _emaV{0.0f};      // rampa suave do setpoint de tensão
+    control::EMA_MED  _emaI{0.0f};      // rampa suave do setpoint de corrente
+    control::Crossover _crossover;       // detector de crossover CV↔CC
     bool           _outputEnabled{false};
 
     // ── FreeRTOS / timer de hardware ─────────────────────────────────────────
@@ -425,8 +443,16 @@ private:
             //   Custo: ~1 µs (2 operações float na FPU do Xtensa LX6).
             const float vSetSmooth = _emaV.update(vSet);
             const float iSetSmooth = _emaI.update(iSet);
+
+            // Crossover: avalia se deve trocar CV↔CC com base nas medições.
+            // Usa os setpoints filtrados pelo EMA para não oscilar durante rampas.
+            // O modo retornado pode diferir do 'mode' lido dos setpoints do usuário.
+            const control::Mode activeMode = _crossover.evaluate(
+                v, i, vSetSmooth, iSetSmooth, mode
+            );
+
             const float v_dac = control::computeFeedbackVoltage(
-                mode, v, i, vSetSmooth, iSetSmooth
+                activeMode, v, i, vSetSmooth, iSetSmooth
             );
             _dac.writeVoltage(v_dac);
 

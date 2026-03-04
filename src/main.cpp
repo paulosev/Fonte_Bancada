@@ -49,6 +49,7 @@
 //  ✔ OVP      – proteção contra sobretensão com histérese
 //  ✔ OCP      – proteção contra sobrecorrente com histérese
 //  ✔ P_out    – cálculo de potência de saída em tempo real (W)
+//  ✔ Crossover – troca automatica CV<->CC por deteccao de limite de corrente
 //  ✔ EEPROM   – gravacao unica da EEPROM do DAC (comando 'burn'): DAC inicia em 3,3V no power-on
 //  ✔ EMA      – rampa suave de setpoint: elimina pico na partida e troca de V_set
 //  ✔ On/Off   – liga/desliga saída via DAC máximo (sem pino enable no XL4015)
@@ -171,6 +172,8 @@ void setup() {
     Serial.println("  on/off  – liga / desliga saída");
     Serial.println("  reset   – reset de proteção OVP/OCP");
     Serial.println("  s       – status atual");
+  Serial.println("  xon     – habilita crossover automatico CV<->CC");
+  Serial.println("  xoff    – desabilita crossover (modo manual)");
   Serial.println("  burn    – grava EEPROM do DAC (usar UMA UNICA VEZ na instalacao)");
 }
 
@@ -254,6 +257,16 @@ void handleSerial() {
     // s – snapshot do estado atual (mesmo que a impressão periódica)
     else if (cmd == "s") {
         psu.printStatus();
+    }
+    // ── Crossover automático CV↔CC ──────────────────────────────────────────────
+    else if (cmd == "xon") {
+        psu.setCrossoverEnabled(true);
+    }
+    else if (cmd == "xoff") {
+        psu.setCrossoverEnabled(false);
+        Serial.printf("[CMD] Modo fixo: %s\n",
+            psu.isCrossoverEnabled() ? "CV/CC auto" :
+            (psu.getMode() == control::Mode::CV ? "CV" : "CC"));
     }
     // ── Gravação única da EEPROM do MCP4725 ──────────────────────────────────
     // Grava raw 4095 (~3,3 V) na EEPROM do DAC. Após isso, ao energizar o

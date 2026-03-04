@@ -100,6 +100,17 @@ constexpr uint32_t SERIAL_PRINT_MS = 200u;  // [ms] → 5 Hz
 constexpr float DEFAULT_V_SET = 5.0f;   // [V]
 constexpr float DEFAULT_I_SET = 1.0f;   // [A]
 
+// ── CROSSOVER AUTOMÁTICO CV↔CC ───────────────────────────────────────────────
+//
+//  CROSSOVER_DEADBAND: banda morta de 2% nos limiares de transição.
+//    Evita oscilação quando a carga opera exatamente no ponto de crossover.
+//    Ex: I_set=2A, deadband=2% → transição CV→CC em I≥1,96A; CC→CV em I<1,96A
+//
+//  CROSSOVER_MIN_CYCLES: número de ciclos consecutivos para confirmar transição.
+//    Filtra ruído de medição. Com CONTROL_PERIOD_US=700µs e 5 ciclos: 3,5 ms.
+constexpr float   CROSSOVER_DEADBAND   = 0.02f;  // 2% de banda morta
+constexpr uint8_t CROSSOVER_MIN_CYCLES = 5u;     // ciclos para confirmar troca
+
 // ── FILTRO EMA (rampa suave de setpoint) ─────────────────────────────────────
 //
 //  α da equação: V_ema[n] = α × V_set + (1−α) × V_ema[n−1]

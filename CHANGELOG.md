@@ -5,6 +5,39 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/).
 
 ---
 
+## [1.6.0] — Crossover automático CV↔CC
+
+### Adicionado
+- `lib/control/crossover.h` — detector de crossover com histerese de tempo
+- Constantes em `config.h`: `CROSSOVER_DEADBAND` (2%) e `CROSSOVER_MIN_CYCLES` (5 ciclos)
+- `psu.h` — método `setCrossoverEnabled(bool)` e `isCrossoverEnabled()`
+- Comandos seriais `xon` (habilita) e `xoff` (desabilita crossover)
+- `printStatus()` exibe modo ativo com indicador `(auto)` ou `(man)`
+
+### Como funciona
+O usuário define V_set e I_set simultaneamente. A fonte opera no modo
+que for necessário para respeitar os dois limites ao mesmo tempo:
+
+- **CV ativo**: carga leve, I_out < I_set — tensão regulada em V_set
+- **Crossover**: I_out atinge I_set — modo CC assume automaticamente
+- **CC ativo**: carga pesada, corrente limitada — tensão cede proporcionalmente
+- **Retorno a CV**: carga diminui, I_out cai abaixo do limiar — CV volta a regular
+
+### Parâmetros de transição
+- Banda morta de 2%: transição CV→CC em `I_out ≥ I_set × 0,98`
+- Histerese temporal: 5 ciclos consecutivos (~3,5 ms) para confirmar troca
+- Evita oscilação quando a carga opera exatamente no ponto de crossover
+
+### Exemplo
+```
+V_set = 12 V, I_set = 2 A
+  Carga 100Ω → I = 0,12 A → CV: mantém 12 V
+  Carga   6Ω → I = 2,0 A  → crossover → CC: mantém 2 A, V = 12 V
+  Carga   2Ω → CC: mantém 2 A, V cai para 4 V
+```
+
+---
+
 ## [1.5.0] — EEPROM do DAC: bloqueio de hardware no power-on
 
 ### Adicionado
