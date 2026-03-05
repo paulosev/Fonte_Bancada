@@ -54,14 +54,7 @@
 #include <Wire.h>
 #include <WiFi.h>
 
-// khoih-prog/ESP_DoubleResetDetector
-// ESP_DRD_USE_EEPROM true: usa flash EEPROM em vez de RTC memory.
-// Necessário porque o botão RST do ESP32-WROOM-32E gera POWERON_RESET
-// que apaga a RTC memory — com EEPROM o flag persiste entre resets.
-// Endereço EEPROM: 0 (reserva 512 bytes internamente pela lib)
-#define ESP_DRD_USE_EEPROM      true
-#define DOUBLERESETDETECTOR_DEBUG false
-#include <ESP_DoubleResetDetector.h>
+#include "double_reset.h"   // detector de duplo reset via EEPROM (implementação própria)
 
 #include "config.h"
 #include "psu.h"
@@ -77,7 +70,7 @@ hal::Display    display;
 // OTAManager é alocado dinamicamente: nullptr = WiFi desligado
 app::OTAManager* otaMgr = nullptr;
 
-DoubleResetDetector drd(DRD_TIMEOUT_S, 0);
+app::DoubleReset drd;
 
 // UIManager referencia otaMgr por ponteiro-para-ponteiro para poder
 // criar/destruir o OTAManager internamente (ao tocar o botão no display)
@@ -111,7 +104,7 @@ void setup() {
     // Usa EEPROM flash — sobrevive ao POWERON_RESET do botão EN/RST
     // do ESP32-WROOM-32E (que apagaria a RTC memory).
     Serial.println("[DRD] Verificando duplo reset...");
-    if (drd.detectDoubleReset()) {
+    if (drd.detect()) {
         Serial.println("[MAIN] Duplo reset detectado → modo OTA");
         // Inicializa display para mostrar tela OTA (se já estiver conectado)
         display.begin();
@@ -182,7 +175,7 @@ void loop() {
     }
 
     // ── 2. Double Reset Detector ─────────────────────────────────────────────
-    drd.loop();
+    drd.tick();
 
     // ── 3. UI (display + touch) ───────────────────────────────────────────────
     //
