@@ -65,6 +65,9 @@
 #include "ui_manager.h"
 
 // ─── Instâncias globais ───────────────────────────────────────────────────────
+// Erro de hardware detectado no setup() — reenviado pelo WebSerial no loop()
+// até alguém conectar no monitor web
+static String hwErrorMsg = "";
 
 app::PSU        psu;
 hal::Display    display;
@@ -126,15 +129,27 @@ void setup() {
 
     // ── Boot normal: hardware obrigatório ────────────────────────────────────
     if (!psu.begin()) {
-        Serial.println("[MAIN] ERRO: Falha no I2C. Verifique INA219/MCP4725.");
+        // Guarda mensagem de erro para reenviar via WebSerial quando alguém conectar
+        // Não trava aqui — inicia OTA para permitir atualização de firmware sem serial
+        hwErrorMsg = "[ERRO] Falha no I2C: INA219 ou MCP4725 nao encontrado!\n"
+                     "[ERRO] Verifique soldagem e endereco I2C.\n"
+                     "[ERRO] Acesse http://192.168.4.1/webserial para ver este log.";
+        Serial.println(hwErrorMsg);
+
         display.begin();
         display.tft.fillScreen(TFT_BLACK);
         display.tft.setTextColor(TFT_RED, TFT_BLACK);
         display.tft.setTextSize(2);
         display.tft.setTextDatum(MC_DATUM);
         display.tft.drawString("ERRO: I2C", 240, 140);
-        display.tft.drawString("Verifique INA219/MCP4725", 240, 170);
-        while (true) delay(1000);
+        display.tft.drawString("2x RST para OTA", 240, 170);
+
+        // Aguarda duplo reset para entrar em OTA — não trava mais em loop infinito
+        Serial.println("[MAIN] De dois resets rapidos para entrar em modo OTA.");
+        while (true) {
+            drd.tick();   // expira flag se necessário
+            delay(100);
+        }
     }
 
     // Display — Core 0 exclusivo
@@ -203,6 +218,15 @@ void loop() {
         else if (cmd == "xoff")        { psu.setCrossoverEnabled(false); }
         else if (cmd == "reset")       { psu.resetProtection(); }
         else if (cmd == "s")           { psu.printStatus(); }
+    }
+
+    // ── WebSerial: reenvia erro de hardware até alguém ler ─────────────────────
+    static uint32_t lastErrLog = 0;
+    if (!hwErrorMsg.isEmpty() && otaMgr && otaMgr->isActive()) {
+        if (millis() - lastErrLog >= 3000) {
+            lastErrLog = millis();
+            otaMgr->log(hwErrorMsg.c_str());
+        }
     }
 
     // ── WebSerial: espelha status a cada 2s quando AP ativo ─────────────────
