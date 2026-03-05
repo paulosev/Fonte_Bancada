@@ -1,6 +1,6 @@
 // ╔══════════════════════════════════════════════════════════════════════════╗
 //  FONTE DE BANCADA DIGITAL  –  ESP32 + XL4015 + INA219 + MCP4725 + TFT
-//  Firmware v2.0.0
+//  Firmware v2.1.0
 // ╚══════════════════════════════════════════════════════════════════════════╝
 //
 // ── SEPARAÇÃO DE CORES ────────────────────────────────────────────────────────
@@ -84,7 +84,7 @@ void setup() {
     delay(100);
 
     Serial.println("\n========================================");
-    Serial.println("  Fonte de Bancada 24V/5A  –  v2.0.0");
+    Serial.println("  Fonte de Bancada 24V/5A  –  v2.1.0");
     Serial.println("  Core 1: controle CV/CC (700us/ciclo)");
     Serial.println("  Core 0: display TFT + OTA + serial");
     Serial.println("========================================");
@@ -203,6 +203,21 @@ void loop() {
         else if (cmd == "xoff")        { psu.setCrossoverEnabled(false); }
         else if (cmd == "reset")       { psu.resetProtection(); }
         else if (cmd == "s")           { psu.printStatus(); }
+    }
+
+    // ── WebSerial: espelha status a cada 2s quando AP ativo ─────────────────
+    static uint32_t lastWsLog = 0;
+    if (otaMgr && otaMgr->isActive() && !otaMgr->isUploading()) {
+        if (millis() - lastWsLog >= 2000) {
+            lastWsLog = millis();
+            char buf[80];
+            snprintf(buf, sizeof(buf),
+                     "[PSU] V:%.2fV I:%.3fA P:%.2fW Mode:%s Out:%s",
+                     psu.getVout(), psu.getIout(), psu.getPout(),
+                     (psu.getCrossoverMode() == control::Mode::CV) ? "CV" : "CC",
+                     psu.isOutputEnabled() ? "ON" : "OFF");
+            otaMgr->log(buf);
+        }
     }
 
     // Cede slice ao FreeRTOS idle task (alimenta watchdog do Core 0)

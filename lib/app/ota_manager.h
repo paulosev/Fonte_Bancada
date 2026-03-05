@@ -40,6 +40,7 @@
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <ElegantOTA.h>
+#include <WebSerial.h>
 #include "config.h"
 #include "buzzer.h"
 
@@ -98,6 +99,9 @@ public:
             }
         });
 
+        // WebSerial — monitor serial pelo navegador em /webserial
+        WebSerial.begin(&_server);
+
         _server.begin();
 
         _active    = true;
@@ -110,9 +114,9 @@ public:
         _beep(100);
 
         Serial.println("[OTA] Servidor web ativo.");
-        Serial.printf("[OTA] Abra no navegador: http://%s/update\n",
-                      WiFi.softAPIP().toString().c_str());
-        Serial.printf("[OTA] Timeout: %lu minutos\n", OTA_TIMEOUT_MS / 60000UL);
+        Serial.printf("[OTA] Firmware:  http://%s/update\n", WiFi.softAPIP().toString().c_str());
+        Serial.printf("[OTA] Monitor:   http://%s/webserial\n", WiFi.softAPIP().toString().c_str());
+        Serial.printf("[OTA] Timeout:   %lu min\n", OTA_TIMEOUT_MS / 60000UL);
 
         return true;
     }
@@ -146,6 +150,13 @@ public:
 
         return true;
     }
+
+    // log(): envia para Serial + WebSerial simultaneamente
+    void log(const char* msg) {
+        Serial.println(msg);
+        if (_active) WebSerial.println(msg);
+    }
+    void log(const String& msg) { log(msg.c_str()); }
 
     void stop() {
         _server.end();
