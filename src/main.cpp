@@ -96,37 +96,46 @@ void setup() {
 
     app::PSU::registerInstance(&psu);
 
+    // ── Duplo reset: checado ANTES do psu.begin() ────────────────────────────
+    // Isso garante que o OTA funciona mesmo sem o hardware I2C soldado.
+    // O DRD usa RTC memory — não depende de nenhum periférico externo.
+    if (drd.detectDoubleReset()) {
+        Serial.println("[MAIN] Duplo reset detectado → modo OTA");
+        // Inicializa display para mostrar tela OTA (se já estiver conectado)
+        display.begin();
+        // Inicia OTA sem depender do PSU
+        otaMgr = new app::OTAManager(psu.getBuzzer());
+        if (!otaMgr->begin()) {
+            delete otaMgr;
+            otaMgr = nullptr;
+            Serial.println("[OTA] Falha ao iniciar AP.");
+        }
+        // Tenta iniciar PSU (pode falhar se hardware não estiver soldado)
+        psu.begin();
+        ui.begin();
+        psu.beep(80);
+        return;  // setup() termina aqui — loop() cuida do OTA
+    }
+
+    // ── Boot normal: hardware obrigatório ────────────────────────────────────
     if (!psu.begin()) {
         Serial.println("[MAIN] ERRO: Falha no I2C. Verifique INA219/MCP4725.");
-        // Mostra erro no display mesmo sem PSU ok
         display.begin();
         display.tft.fillScreen(TFT_BLACK);
         display.tft.setTextColor(TFT_RED, TFT_BLACK);
         display.tft.setTextSize(2);
         display.tft.setTextDatum(MC_DATUM);
         display.tft.drawString("ERRO: I2C", 240, 140);
-        display.tft.drawString("Verifique hardware", 240, 170);
+        display.tft.drawString("Verifique INA219/MCP4725", 240, 170);
         while (true) delay(1000);
     }
 
     // Display — Core 0 exclusivo
     display.begin();
 
-    // ── Verifica duplo reset ──────────────────────────────────────────────────
-    // Deve ser chamado no setup(), antes de qualquer delay longo
-    if (drd.detectDoubleReset()) {
-        Serial.println("[MAIN] Duplo reset → modo OTA");
-        otaMgr = new app::OTAManager(psu.getBuzzer());
-        psu.setOutput(false);       // desliga saída durante OTA
-        if (!otaMgr->begin()) {
-            delete otaMgr;
-            otaMgr = nullptr;
-        }
-    } else {
-        Serial.println("[MAIN] Boot normal.");
-    }
+    Serial.println("[MAIN] Boot normal.");
 
-    // UI: splash + tela inicial (vai para OTA_ACTIVE se otaMgr ativo)
+    // UI: splash + tela inicial
     ui.begin();
 
     // Beep de boot
