@@ -135,7 +135,7 @@ constexpr float EMA_ALPHA = 0.005f;
 //  OTA_AP_IP:   endereço IP fixo do ESP no modo AP.
 //    Acesse http://OTA_AP_IP no navegador para confirmar conexão (opcional).
 //    Use este IP no PlatformIO como upload_port.
-constexpr float    DRD_TIMEOUT_S     = 2.0f;          // [s]  janela duplo reset
+constexpr float    DRD_TIMEOUT_S     = 5.0f;          // [s]  janela duplo reset (5s = mais tempo para 2x RST)
 constexpr uint32_t OTA_TIMEOUT_MS    = 300000UL;      // [ms] 5 min aguardando OTA
 constexpr uint32_t OTA_BEEP_INTERVAL_MS = 3000UL;     // [ms] intervalo beep OTA
 constexpr char     OTA_AP_SSID[]     = "Fonte-OTA";   // nome da rede AP

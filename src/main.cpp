@@ -96,9 +96,17 @@ void setup() {
 
     app::PSU::registerInstance(&psu);
 
+    // ── Diagnóstico: motivo do reset ─────────────────────────────────────────
+    {
+        const uint32_t reason = esp_reset_reason();
+        Serial.printf("[DRD] Motivo reset: %d  (1=POWERON, 3=SW, 4=WATCHDOG, 12=RST_PIN)\n",
+                      static_cast<int>(reason));
+    }
+
     // ── Duplo reset: checado ANTES do psu.begin() ────────────────────────────
     // Isso garante que o OTA funciona mesmo sem o hardware I2C soldado.
     // O DRD usa RTC memory — não depende de nenhum periférico externo.
+    Serial.println("[DRD] Verificando duplo reset...");
     if (drd.detectDoubleReset()) {
         Serial.println("[MAIN] Duplo reset detectado → modo OTA");
         // Inicializa display para mostrar tela OTA (se já estiver conectado)
