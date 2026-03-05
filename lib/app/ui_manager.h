@@ -562,6 +562,7 @@ private:
         _label(14, 78,  "Fonte-OTA", 2, COL_OTA);
         _label(14, 104, "Endereco IP:", 1, COL_DIM);
         _label(14, 118, "192.168.4.1", 2, COL_WHITE);
+        _label(14, 145, "Navegador: /update", 1, COL_OTA);
 
         _label(14, 148, "Progresso do upload:", 1, COL_DIM);
 

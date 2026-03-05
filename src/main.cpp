@@ -1,6 +1,6 @@
 // ╔══════════════════════════════════════════════════════════════════════════╗
 //  FONTE DE BANCADA DIGITAL  –  ESP32 + XL4015 + INA219 + MCP4725 + TFT
-//  Firmware v1.9.0
+//  Firmware v2.0.0
 // ╚══════════════════════════════════════════════════════════════════════════╝
 //
 // ── SEPARAÇÃO DE CORES ────────────────────────────────────────────────────────
@@ -43,16 +43,18 @@
 //
 // ── OTA ───────────────────────────────────────────────────────────────────────
 //
-//  Ativar: 2× RST em <2s  OU  tocar ícone AP na tela principal (1s)
+//  Ativar: 2× RST  OU  tocar ícone AP na tela principal (1s)
 //          OU  menu Configurações → WiFi/OTA
 //  Rede:   Fonte-OTA (aberta, sem senha)  ·  IP: 192.168.4.1
-//  Upload: PlatformIO → descomente upload_port no platformio.ini
+//  Upload: Abra  http://192.168.4.1/update  no navegador
+//          Selecione .pio/build/esp32dev/firmware.bin  e clique Upload
 //
 // ─────────────────────────────────────────────────────────────────────────────
 
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
+#include <AsyncTCP.h>
 
 #include "double_reset.h"   // detector de duplo reset via EEPROM (implementação própria)
 
@@ -82,7 +84,7 @@ void setup() {
     delay(100);
 
     Serial.println("\n========================================");
-    Serial.println("  Fonte de Bancada 24V/5A  –  v1.9.0");
+    Serial.println("  Fonte de Bancada 24V/5A  –  v2.0.0");
     Serial.println("  Core 1: controle CV/CC (700us/ciclo)");
     Serial.println("  Core 0: display TFT + OTA + serial");
     Serial.println("========================================");
