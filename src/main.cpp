@@ -55,7 +55,11 @@
 #include <WiFi.h>
 
 // khoih-prog/ESP_DoubleResetDetector
-#define ESP_DRD_USE_EEPROM      false
+// ESP_DRD_USE_EEPROM true: usa flash EEPROM em vez de RTC memory.
+// Necessário porque o botão RST do ESP32-WROOM-32E gera POWERON_RESET
+// que apaga a RTC memory — com EEPROM o flag persiste entre resets.
+// Endereço EEPROM: 0 (reserva 512 bytes internamente pela lib)
+#define ESP_DRD_USE_EEPROM      true
 #define DOUBLERESETDETECTOR_DEBUG false
 #include <ESP_DoubleResetDetector.h>
 
@@ -98,14 +102,14 @@ void setup() {
 
     // ── Diagnóstico: motivo do reset ─────────────────────────────────────────
     {
-        const uint32_t reason = esp_reset_reason();
-        Serial.printf("[DRD] Motivo reset: %d  (1=POWERON, 3=SW, 4=WATCHDOG, 12=RST_PIN)\n",
-                      static_cast<int>(reason));
+        const int reason = static_cast<int>(esp_reset_reason());
+        Serial.printf("[DRD] Motivo reset: %d  (1=POWERON, 3=SW, 4=WATCHDOG, 12=RST_PIN)\n", reason);
+        Serial.println("[DRD] Usando EEPROM flash (persiste em POWERON_RESET)");
     }
 
     // ── Duplo reset: checado ANTES do psu.begin() ────────────────────────────
-    // Isso garante que o OTA funciona mesmo sem o hardware I2C soldado.
-    // O DRD usa RTC memory — não depende de nenhum periférico externo.
+    // Usa EEPROM flash — sobrevive ao POWERON_RESET do botão EN/RST
+    // do ESP32-WROOM-32E (que apagaria a RTC memory).
     Serial.println("[DRD] Verificando duplo reset...");
     if (drd.detectDoubleReset()) {
         Serial.println("[MAIN] Duplo reset detectado → modo OTA");
