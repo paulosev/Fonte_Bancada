@@ -129,12 +129,21 @@ void setup() {
 
     // ── Boot normal: hardware obrigatório ────────────────────────────────────
     if (!psu.begin()) {
-        // Guarda mensagem de erro para reenviar via WebSerial quando alguém conectar
-        // Não trava aqui — inicia OTA para permitir atualização de firmware sem serial
-        hwErrorMsg = "[ERRO] Falha no I2C: INA219 ou MCP4725 nao encontrado!\n"
+        hwErrorMsg = "[ERRO] I2C: INA219 ou MCP4725 nao encontrado!\n"
                      "[ERRO] Verifique soldagem e endereco I2C.\n"
-                     "[ERRO] Acesse http://192.168.4.1/webserial para ver este log.";
+                     "[ERRO] Conecte em WiFi 'Fonte-OTA' e abra:\n"
+                     "[ERRO] http://192.168.4.1/webserial";
         Serial.println(hwErrorMsg);
+
+        // Liga AP e WebSerial imediatamente — sem esperar duplo reset
+        // Assim o erro fica visível no navegador assim que alguém conectar
+        otaMgr = new app::OTAManager(psu.getBuzzer());
+        if (otaMgr->begin()) {
+            Serial.println("[MAIN] AP ativo — conecte em Fonte-OTA e abra /webserial");
+        } else {
+            delete otaMgr;
+            otaMgr = nullptr;
+        }
 
         display.begin();
         display.tft.fillScreen(TFT_BLACK);
@@ -142,14 +151,13 @@ void setup() {
         display.tft.setTextSize(2);
         display.tft.setTextDatum(MC_DATUM);
         display.tft.drawString("ERRO: I2C", 240, 140);
-        display.tft.drawString("2x RST para OTA", 240, 170);
+        display.tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+        display.tft.drawString("WiFi: Fonte-OTA", 240, 175);
+        display.tft.setTextSize(1);
+        display.tft.drawString("192.168.4.1/webserial", 240, 210);
 
-        // Aguarda duplo reset para entrar em OTA — não trava mais em loop infinito
-        Serial.println("[MAIN] De dois resets rapidos para entrar em modo OTA.");
-        while (true) {
-            drd.tick();   // expira flag se necessário
-            delay(100);
-        }
+        // loop() cuida de reenviar hwErrorMsg via WebSerial
+        return;
     }
 
     // Display — Core 0 exclusivo
