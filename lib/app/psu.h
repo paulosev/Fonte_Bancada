@@ -119,9 +119,10 @@ public:
         // ── Timer de hardware (grupo 0, timer 0) ──────────────────────────
         // Prescaler 80 → clock do timer = 80 MHz / 80 = 1 MHz → 1 tick = 1 µs
         // Auto-reload: o alarme se recarrega automaticamente a cada período.
+        // Timer v1.x: divider=80 → 1 tick = 1µs (80MHz / 80 = 1MHz)
         _timer = timerBegin(0, 80, true);
-        timerAttachInterrupt(_timer, _timerISR, true);     // edge trigger
-        timerAlarmWrite(_timer, CONTROL_PERIOD_US, true);  // período em µs
+        timerAttachInterrupt(_timer, _timerISR, true);
+        timerAlarmWrite(_timer, CONTROL_PERIOD_US, true);
         timerAlarmEnable(_timer);
 
         Serial.printf("[PSU] Controle iniciado: periodo %u us (~%.0f Hz), Core %d, prio %d\n",
@@ -287,6 +288,8 @@ public:
         delay(ms);
         digitalWrite(PIN_BUZZER, LOW);
     }
+
+    control::Mode getCrossoverMode() const { return _crossover.getMode(); }
 
     bool burnDACEEPROM() {
         return _dac.burnEEPROM();

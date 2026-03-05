@@ -1,240 +1,194 @@
 // ╔══════════════════════════════════════════════════════════════════════════╗
-//  FONTE DE BANCADA DIGITAL  –  ESP32 + XL4015 + INA219 + MCP4725
-//  Versão: 1.7.0
+//  FONTE DE BANCADA DIGITAL  –  ESP32 + XL4015 + INA219 + MCP4725 + TFT
+//  Firmware v1.9.0
 // ╚══════════════════════════════════════════════════════════════════════════╝
 //
-// ── VISÃO GERAL ──────────────────────────────────────────────────────────────
+// ── SEPARAÇÃO DE CORES ────────────────────────────────────────────────────────
 //
-//  Fonte de bancada controlada digitalmente com tensão máxima de 24 V e
-//  corrente máxima de 5 A. O controle é feito por um "divisor de tensão
-//  virtual ativo": o ESP32 calcula dinamicamente a tensão de feedback
-//  (V_dac) e a entrega ao pino FB do XL4015 via DAC MCP4725.
+//  ┌─────────────────────────────────────────────────────────────┐
+//  │  CORE 1  –  Task "ctrl"  (prioridade máxima, 700µs/ciclo)  │
+//  │                                                             │
+//  │  • Lê INA219 (V e I de saída)                              │
+//  │  • Calcula V_dac via equação de feedback                    │
+//  │  • Aplica filtro EMA nos setpoints                          │
+//  │  • Detecta crossover CV↔CC automático                      │
+//  │  • Verifica OVP / OCP                                       │
+//  │  • Escreve DAC MCP4725 via I2C                              │
+//  │                                                             │
+//  │  O Core 1 NUNCA toca no display ou no touch.               │
+//  │  Toda saída do Core 1 é via getters atômicos do PSU.        │
+//  └─────────────────────────────────────────────────────────────┘
+//
+//  ┌─────────────────────────────────────────────────────────────┐
+//  │  CORE 0  –  Arduino loop()  (prioridade normal)             │
+//  │                                                             │
+//  │  • UIManager::tick()  → TFT + touch                        │
+//  │  • OTAManager::handle() → ArduinoOTA                       │
+//  │  • drd.loop()           → double reset detector            │
+//  │  • psu.tickBuzzer()     → buzzer não-bloqueante            │
+//  │  • Serial (debug)       → comandos de texto opcionais       │
+//  │                                                             │
+//  │  O Core 0 lê o PSU via getters (atômicos) e chama         │
+//  │  setVoltage/setCurrent/setOutput — protegidos por spinlock. │
+//  └─────────────────────────────────────────────────────────────┘
 //
 // ── HARDWARE ─────────────────────────────────────────────────────────────────
 //
-//  XL4015   – CI step-down; malha analógica fechada via pino FB
-//  MCP4725  – DAC I2C 12-bit; gera V_dac para o pino FB
-//  INA219   – Sensor I2C 12-bit de tensão e corrente de saída
-//  Buzzer   – Sinalização sonora (GPIO18): proteções e modo OTA
+//  XL4015   – CI step-down; malha fechada via pino FB
+//  MCP4725  – DAC I2C 12-bit; gera V_dac para o pino FB (I2C)
+//  INA219   – Sensor I2C de V e I (I2C)
+//  ILI9488  – TFT 480×320, SPI2 (MISO=12 MOSI=13 SCK=14 CS=5 DC=2 RST=4)
+//  XPT2046  – Touch SPI2 compartilhado (CS=17 IRQ=16)
+//  Buzzer   – GPIO18
 //
-// ── FEATURES ─────────────────────────────────────────────────────────────────
+// ── OTA ───────────────────────────────────────────────────────────────────────
 //
-//  ✔ Modo CV       – tensão constante (0 a 24 V)
-//  ✔ Modo CC       – corrente constante (0 a 5 A)
-//  ✔ Crossover     – troca automática CV↔CC por detecção de limite
-//  ✔ OVP / OCP     – proteções com histérese + buzzer de alarme
-//  ✔ P_out         – potência de saída em tempo real (W)
-//  ✔ EMA           – rampa suave de setpoint (sem pico na partida/troca)
-//  ✔ On/Off        – liga/desliga via DAC máximo (XL4015 sem pino enable)
-//  ✔ EEPROM DAC    – MCP4725 inicia em 3,3 V sozinho (zero pico no boot)
-//  ✔ OTA WiFi      – atualização de firmware via AP próprio (sem roteador)
-//  ✔ Duplo Reset   – ativa modo OTA sem display/serial (2× RST em <2s)
-//
-// ── ARQUITETURA DE SOFTWARE ───────────────────────────────────────────────────
-//
-//  Core 1  │  Task "ctrl" (FreeRTOS, prio máxima, 700 µs/ciclo)
-//          │  Controle CV/CC, crossover, EMA, proteções, DAC, INA219
-//          │
-//  Core 0  │  Arduino loop() (prioridade normal)
-//          │  Serial/UI, buzzer, OTA handle, double reset check
-//
-// ── OTA — ATUALIZAÇÃO SEM FIO ─────────────────────────────────────────────────
-//
-//  1. Dê dois cliques rápidos no botão RST (dentro de 2 s)
-//  2. Buzzer emite 3 beeps curtos → modo OTA ativo
-//  3. Conecte o notebook na rede WiFi "Fonte-OTA" (sem senha)
-//  4. No PlatformIO: descomente upload_port = 192.168.4.1 no platformio.ini
-//  5. Faça upload — ESP reinicia automaticamente com o novo firmware
-//  6. Sem upload em 5 min → AP desliga, volta ao normal
-//
-//  Não requer roteador, credenciais ou configuração prévia.
-//
-// ── INTERFACE SERIAL (115200 baud) ────────────────────────────────────────────
-//
-//  v<val>   – tensão   (ex: v12.5)
-//  i<val>   – corrente (ex: i2.0)
-//  mcv/mcc  – modo CV / CC (manual)
-//  xon/xoff – crossover automático ligado / desligado
-//  on/off   – liga / desliga saída
-//  reset    – reset proteção OVP/OCP
-//  s        – status
-//  burn     – grava EEPROM do DAC (UMA VEZ na instalação)
+//  Ativar: 2× RST em <2s  OU  tocar ícone AP na tela principal (1s)
+//          OU  menu Configurações → WiFi/OTA
+//  Rede:   Fonte-OTA (aberta, sem senha)  ·  IP: 192.168.4.1
+//  Upload: PlatformIO → descomente upload_port no platformio.ini
 //
 // ─────────────────────────────────────────────────────────────────────────────
 
 #include <Arduino.h>
 #include <Wire.h>
-// khoih-prog/ESP_DoubleResetDetector: define obrigatório antes do include
-#define ESP_DRD_USE_EEPROM  false   // usa RTC memory, não EEPROM flash
+#include <WiFi.h>
+
+// khoih-prog/ESP_DoubleResetDetector
+#define ESP_DRD_USE_EEPROM      false
 #define DOUBLERESETDETECTOR_DEBUG false
 #include <ESP_DoubleResetDetector.h>
+
 #include "config.h"
 #include "psu.h"
 #include "ota_manager.h"
+#include "display.h"
+#include "ui_manager.h"
 
 // ─── Instâncias globais ───────────────────────────────────────────────────────
-app::PSU psu;
 
-// OTAManager referencia o buzzer interno do PSU via getter
-// Declarado após psu para garantir ordem de construção
-app::OTAManager* otaManager = nullptr;
+app::PSU        psu;
+hal::Display    display;
 
-DoubleResetDetector drd(DRD_TIMEOUT_S, 0 /* endereço EEPROM RTC */);
+// OTAManager é alocado dinamicamente: nullptr = WiFi desligado
+app::OTAManager* otaMgr = nullptr;
 
-// ─── Protótipos ───────────────────────────────────────────────────────────────
-void handleSerial();
+DoubleResetDetector drd(DRD_TIMEOUT_S, 0);
+
+// UIManager referencia otaMgr por ponteiro-para-ponteiro para poder
+// criar/destruir o OTAManager internamente (ao tocar o botão no display)
+app::UIManager  ui(display, psu, otaMgr);
 
 // ─────────────────────────────────────────────────────────────────────────────
 void setup() {
     Serial.begin(115200);
-    delay(200);
+    delay(100);
 
     Serial.println("\n========================================");
-    Serial.println("  Fonte de Bancada 24V/5A  –  ESP32");
-    Serial.println("  Firmware v1.8.0");
+    Serial.println("  Fonte de Bancada 24V/5A  –  v1.9.0");
+    Serial.println("  Core 1: controle CV/CC (700us/ciclo)");
+    Serial.println("  Core 0: display TFT + OTA + serial");
     Serial.println("========================================");
 
+    // I2C para PSU (INA219 + MCP4725)
     Wire.begin(PIN_SDA, PIN_SCL);
     Wire.setClock(I2C_FREQ_HZ);
 
     app::PSU::registerInstance(&psu);
 
     if (!psu.begin()) {
-        Serial.println("[MAIN] Falha na inicialização. Verifique I2C.");
+        Serial.println("[MAIN] ERRO: Falha no I2C. Verifique INA219/MCP4725.");
+        // Mostra erro no display mesmo sem PSU ok
+        display.begin();
+        display.tft.fillScreen(TFT_BLACK);
+        display.tft.setTextColor(TFT_RED, TFT_BLACK);
+        display.tft.setTextSize(2);
+        display.tft.setTextDatum(MC_DATUM);
+        display.tft.drawString("ERRO: I2C", 240, 140);
+        display.tft.drawString("Verifique hardware", 240, 170);
         while (true) delay(1000);
     }
 
+    // Display — Core 0 exclusivo
+    display.begin();
+
     // ── Verifica duplo reset ──────────────────────────────────────────────────
-    // doubleResetDetected() DEVE ser chamado no setup(), antes de qualquer
-    // delay longo. O DRD usa RTC memory para persistir entre resets.
+    // Deve ser chamado no setup(), antes de qualquer delay longo
     if (drd.detectDoubleReset()) {
-        Serial.println("[MAIN] Duplo reset detectado → iniciando modo OTA...");
-        // OTAManager precisa do buzzer; acessa via psu.getBuzzer()
-        otaManager = new app::OTAManager(psu.getBuzzer());
-        if (!otaManager->begin()) {
-            // Falha ao conectar WiFi — descarta e opera normalmente
-            delete otaManager;
-            otaManager = nullptr;
+        Serial.println("[MAIN] Duplo reset → modo OTA");
+        otaMgr = new app::OTAManager(psu.getBuzzer());
+        psu.setOutput(false);       // desliga saída durante OTA
+        if (!otaMgr->begin()) {
+            delete otaMgr;
+            otaMgr = nullptr;
         }
     } else {
-        Serial.println("[MAIN] Boot normal. WiFi desligado.");
+        Serial.println("[MAIN] Boot normal.");
     }
 
-    // Sinaliza fim do setup: 1 beep curto
-    psu.beep(100);
+    // UI: splash + tela inicial (vai para OTA_ACTIVE se otaMgr ativo)
+    ui.begin();
 
-    Serial.println("[MAIN] Pronto. Comandos: v i mcv mcc xon xoff on off reset s burn");
-    if (otaManager && otaManager->isActive()) {
-        Serial.printf("[OTA]  Aguardando upload em: %s.local\n", OTA_HOSTNAME);
-    }
+    // Beep de boot
+    psu.beep(80);
+
+    Serial.println("[MAIN] Pronto.");
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  LOOP — Core 0
+//
+//  Ordem de chamada intencional:
+//    1. OTA handle   — processa eventos de upload (prioridade alta no Core 0)
+//    2. DRD loop     — limpa flag de duplo reset após janela de detecção
+//    3. UI tick      — display + touch (pode levar ~5-80ms em redraw completo)
+//    4. Buzzer tick  — buzzer não-bloqueante
+//    5. Serial       — debug opcional
+//
+//  O vTaskDelay(1) ao final cede tempo ao idle task do FreeRTOS,
+//  permitindo que o watchdog do Core 0 seja alimentado corretamente.
 // ─────────────────────────────────────────────────────────────────────────────
 void loop() {
-    // ── Modo OTA ─────────────────────────────────────────────────────────────
-    // Quando OTA ativo: processa eventos OTA, silencia controle serial normal.
-    if (otaManager && otaManager->isActive()) {
-        if (!otaManager->handle()) {
-            // handle() retornou false → timeout ou erro → volta ao normal
-            delete otaManager;
-            otaManager = nullptr;
+
+    // ── 1. OTA ───────────────────────────────────────────────────────────────
+    if (otaMgr && otaMgr->isActive()) {
+        if (!otaMgr->handle()) {
+            // Timeout ou erro: destrói e volta ao normal
+            delete otaMgr;
+            otaMgr = nullptr;
+            psu.setOutput(true);    // religa saída após OTA
         }
-        // Durante OTA: não processa serial nem imprime status
-        // (evita interferência com o upload)
-        drd.loop();
-        vTaskDelay(1);
-        return;
     }
 
-    // ── Operação normal ───────────────────────────────────────────────────────
-    static uint32_t lastPrint = 0;
-    if (millis() - lastPrint >= SERIAL_PRINT_MS) {
-        lastPrint = millis();
-        psu.printStatus();
-    }
-
-    handleSerial();
-    psu.tickBuzzer();
-
-    // DRD deve ser "resetado" no loop após o tempo de detecção passar.
-    // Isso limpa o flag da RTC memory para o próximo boot normal.
+    // ── 2. Double Reset Detector ─────────────────────────────────────────────
     drd.loop();
 
+    // ── 3. UI (display + touch) ───────────────────────────────────────────────
+    //
+    // tick() é não-bloqueante: lê toque, atualiza só o que mudou.
+    // Redraw completo (troca de tela) pode levar até ~80ms — aceitável
+    // porque o Core 1 continua executando o controle independentemente.
+    ui.tick();
+
+    // ── 4. Buzzer ────────────────────────────────────────────────────────────
+    psu.tickBuzzer();
+
+    // ── 5. Serial (debug — opcional, pode remover em produção) ───────────────
+    if (Serial.available()) {
+        String cmd = Serial.readStringUntil('\n');
+        cmd.trim(); cmd.toLowerCase();
+        if      (cmd.startsWith("v"))  { psu.setVoltage(cmd.substring(1).toFloat()); }
+        else if (cmd.startsWith("i"))  { psu.setCurrent(cmd.substring(1).toFloat()); }
+        else if (cmd == "on")          { psu.setOutput(true); }
+        else if (cmd == "off")         { psu.setOutput(false); }
+        else if (cmd == "mcv")         { psu.setMode(control::Mode::CV); }
+        else if (cmd == "mcc")         { psu.setMode(control::Mode::CC); }
+        else if (cmd == "xon")         { psu.setCrossoverEnabled(true); }
+        else if (cmd == "xoff")        { psu.setCrossoverEnabled(false); }
+        else if (cmd == "reset")       { psu.resetProtection(); }
+        else if (cmd == "s")           { psu.printStatus(); }
+    }
+
+    // Cede slice ao FreeRTOS idle task (alimenta watchdog do Core 0)
     vTaskDelay(1);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-void handleSerial() {
-    if (!Serial.available()) return;
-    String cmd = Serial.readStringUntil('\n');
-    cmd.trim();
-    cmd.toLowerCase();
-    if (cmd.length() == 0) return;
-
-    if (cmd.startsWith("v")) {
-        psu.setVoltage(cmd.substring(1).toFloat());
-        Serial.printf("[CMD] V_set = %.2f V\n", psu.getVset());
-    }
-    else if (cmd.startsWith("i")) {
-        psu.setCurrent(cmd.substring(1).toFloat());
-        Serial.printf("[CMD] I_set = %.3f A\n", psu.getIset());
-    }
-    else if (cmd == "mcv") {
-        psu.setMode(control::Mode::CV);
-        Serial.println("[CMD] Modo manual: CV");
-    }
-    else if (cmd == "mcc") {
-        psu.setMode(control::Mode::CC);
-        Serial.println("[CMD] Modo manual: CC");
-    }
-    else if (cmd == "xon") {
-        psu.setCrossoverEnabled(true);
-    }
-    else if (cmd == "xoff") {
-        psu.setCrossoverEnabled(false);
-    }
-    else if (cmd == "on") {
-        psu.setOutput(true);
-        Serial.println("[CMD] Saída LIGADA");
-    }
-    else if (cmd == "off") {
-        psu.setOutput(false);
-        Serial.println("[CMD] Saída DESLIGADA");
-    }
-    else if (cmd == "reset") {
-        psu.resetProtection();
-        Serial.println("[CMD] Proteção resetada");
-    }
-    else if (cmd == "s") {
-        psu.printStatus();
-    }
-    else if (cmd == "burn") {
-        Serial.println("[BURN] ATENCAO: Grava EEPROM do MCP4725.");
-        Serial.println("[BURN] Use apenas na primeira instalacao.");
-        Serial.println("[BURN] Confirme digitando 'burnok' em 5 segundos...");
-        const uint32_t deadline = millis() + 5000;
-        bool confirmed = false;
-        while (millis() < deadline) {
-            if (Serial.available()) {
-                String conf = Serial.readStringUntil('\n');
-                conf.trim(); conf.toLowerCase();
-                if (conf == "burnok") { confirmed = true; break; }
-                else { break; }
-            }
-            delay(50);
-        }
-        if (!confirmed) {
-            Serial.println("[BURN] Cancelado.");
-        } else {
-            Serial.println("[BURN] Gravando EEPROM com 4095 (3.3V)...");
-            if (psu.burnDACEEPROM()) {
-                Serial.println("[BURN] OK! Nao use este comando novamente.");
-            } else {
-                Serial.println("[BURN] ERRO: Verifique o I2C.");
-            }
-        }
-    }
-    else {
-        Serial.println("[CMD] Comandos: v i mcv mcc xon xoff on off reset s burn");
-    }
 }

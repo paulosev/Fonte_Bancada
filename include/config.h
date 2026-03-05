@@ -141,6 +141,31 @@ constexpr uint32_t OTA_BEEP_INTERVAL_MS = 3000UL;     // [ms] intervalo beep OTA
 constexpr char     OTA_AP_SSID[]     = "Fonte-OTA";   // nome da rede AP
 constexpr char     OTA_HOSTNAME[]    = "fonte-bancada";// hostname mDNS
 
+// ── DISPLAY TFT ILI9488 + TOUCH XPT2046 ─────────────────────────────────────
+//
+//  SPI2 compartilhado: MISO=12  MOSI=13  SCK=14
+//  ILI9488:  CS=5   DC=2   RST=4
+//  XPT2046:  CS=17  IRQ=16
+//  MicroSD:  CS=15
+//
+//  TFT_W / TFT_H: dimensões lógicas em orientação paisagem (rotation=1)
+//  TFT_ROTATION:  1 = paisagem, 0 = retrato
+//
+//  TOUCH_SENSITIVITY: limiar mínimo de pressão (0-100). Aumente se
+//    toques fantasmas; reduza se não detectar toques suaves.
+//
+//  UI_REFRESH_MS: intervalo de atualização dos valores na tela principal.
+//    10 Hz (100ms) é suficiente para leitura humana e não sobrecarrega SPI.
+//    O controle no Core 1 continua a 700µs independente deste valor.
+//
+//  LONG_PRESS_MS: tempo mínimo de toque longo para acionar WiFi/OTA.
+constexpr uint16_t TFT_W              = 480;
+constexpr uint16_t TFT_H              = 320;
+constexpr uint8_t  TFT_ROTATION       = 1;
+constexpr uint16_t TOUCH_SENSITIVITY  = 600;  // uint16_t: valor 0-1000
+constexpr uint32_t UI_REFRESH_MS      = 100;   // [ms] 10 Hz
+constexpr uint32_t LONG_PRESS_MS      = 1000;  // [ms] toque longo WiFi
+
 // ── BUZZER ────────────────────────────────────────────────────────────────────
 // GPIO de saída para buzzer passivo/ativo de sinalização de proteção.
 // O buzzer é acionado quando OVP ou OCP dispara e silenciado ao resetar.

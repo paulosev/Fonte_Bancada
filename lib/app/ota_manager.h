@@ -168,8 +168,9 @@ public:
         Serial.println("[OTA] AP desligado. Fonte operando normalmente.");
     }
 
-    bool isActive()    const { return _active; }
-    bool isUploading() const { return _uploading; }
+    bool     isActive()      const { return _active; }
+    bool     isUploading()   const { return _uploading; }
+    uint32_t getStartTime()  const { return _startTime; }
 
 private:
     hal::Buzzer& _buzzer;

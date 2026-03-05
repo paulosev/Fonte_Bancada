@@ -5,6 +5,40 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/).
 
 ---
 
+## [1.9.0] — Interface Gráfica TFT 480×320 (ILI9488 + XPT2046)
+
+### Adicionado
+- `lib/hal/display.h` — driver HAL para ILI9488 + XPT2046: tap, release, long press
+- `lib/app/ui_manager.h` — gerenciador de UI com 6 telas completas
+- `include/config.h` — constantes TFT (dimensões, rotação, sensibilidade, refresh)
+- Biblioteca: `bodmer/TFT_eSPI @ ^2.5.43` com pinagem via `build_flags`
+
+### Telas implementadas
+| Tela | Acesso |
+|---|---|
+| Splash | Boot |
+| Principal | Sempre — V/I/P, ON/OFF, CV/CC, ícone AP, ícone Config |
+| Ajuste Setpoint | Toque em V_set ou I_set → teclado numérico |
+| Configurações | Ícone ⚙ → crossover, OVP, OCP, EMA, WiFi/OTA, EEPROM |
+| Alerta Proteção | Automático (OVP/OCP) — modal com buzzer |
+| WiFi/OTA Confirmar | 3 caminhos: toque longo AP, Config→WiFi, 2×RST |
+| OTA Ativo | AP ligado: SSID, IP, countdown, progresso, desligar |
+
+### Arquitetura dual-core (display NÃO interfere no controle)
+- **Core 1** (prioridade MAX, 700µs/ciclo): INA219 + DAC + EMA + crossover + OVP/OCP
+- **Core 0** (prioridade normal): `ui.tick()` + `otaMgr.handle()` + buzzer + serial
+- `ui.tick()` é não-bloqueante: só redesenha regiões que mudaram (dirty flag)
+- Redraw completo (~80ms) não afeta Core 1 — cores são independentes
+- Comunicação Core0↔Core1: getters atômicos + spinlock (já existente no PSU)
+
+### WiFi/OTA pelo display
+- Toque longo (1s) no ícone AP da tela principal
+- Item "WiFi/OTA" em Configurações
+- 2× RST (hardware — funciona sem display)
+- Botão "DESLIGAR WiFi" disponível na tela OTA Ativo
+
+---
+
 ## [1.8.0] — OTA via Access Point (sem roteador, sem credenciais)
 
 ### Adicionado
